@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/App/index.css">
+    <title>Note App</title>
+</head>
+<body>
+    <div class="container">
+        <h1>Note App</h1>
+        <form id="note-form">
+            <textarea id="note-content" placeholder="Write your note here..."></textarea>
+            <button type="submit">Add Note</button>
+        </form>
+        <ul id="notes-list">
+            <!-- Notes will be inserted here by JavaScript -->
+        </ul>
+    </div>
+    <script>
+        const form = document.getElementById('note-form');
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const content = document.getElementById('note-content').value;
+            const response = await fetch('/notes/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ content }),
+            });
+            const newNote = await response.json();
+            const notesList = document.getElementById('notes-list');
+            const listItem = document.createElement('li');
+            listItem.innerHTML = `${newNote.content} <button onclick="deleteNote(${newNote.id})">Delete</button>`;
+            notesList.appendChild(listItem);
+            document.getElementById('note-content').value = '';
+        });
+
+        async function deleteNote(id) {
+            await fetch(`/notes/${id}`, { method: 'DELETE' });
+            location.reload();
+        }
+
+        async function loadNotes() {
+            const response = await fetch('/notes/');
+            const notes = await response.json();
+            const notesList = document.getElementById('notes-list');
+            notesList.innerHTML = '';
+            notes.forEach(note => {
+                const listItem = document.createElement('li');
+                listItem.innerHTML = `${note.content} <button onclick="deleteNote(${note.id})">Delete</button>`;
+                notesList.appendChild(listItem);
+            });
+        }
+
+        window.onload = loadNotes;
+    </script>
+</body>
+</html>
