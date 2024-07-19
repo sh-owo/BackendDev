@@ -3,58 +3,149 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="/App/index.css">
-    <title>Note App</title>
+    <link rel="stylesheet" href="index.css">
+    <title>Memo App</title>
 </head>
 <body>
-    <div class="container">
-        <h1>Note App</h1>
-        <form id="note-form">
-            <textarea id="note-content" placeholder="Write your note here..."></textarea>
-            <button type="submit">Add Note</button>
+    <h1>Memo App</h1>
+
+    <div id="auth-container">
+        <h2>Login</h2>
+        <form id="login-form">
+            <input type="text" id="username" placeholder="Username" required>
+            <input type="password" id="password" placeholder="Password" required>
+            <button type="submit">Login</button>
         </form>
-        <ul id="notes-list">
-            <!-- Notes will be inserted here by JavaScript -->
-        </ul>
+        <h2>Register</h2>
+        <form id="register-form">
+            <input type="text" id="reg-username" placeholder="Username" required>
+            <input type="password" id="reg-password" placeholder="Password" required>
+            <button type="submit">Register</button>
+        </form>
     </div>
+
+    <div id="note-container" style="display:none;">
+        <form id="create-note-form">
+            <input type="text" name="title" placeholder="Title" required>
+            <textarea name="content" placeholder="Content" required></textarea>
+            <button type="submit">Create Note</button>
+        </form>
+        <h2>Notes</h2>
+        <div id="notes-container"></div>
+
+        <h1>Chat with GPT</h1>
+        <form id="chat-form">
+            <input type="text" id="prompt" placeholder="Type your message" required>
+            <button type="submit">Send</button>
+        </form>
+        <h2>Chat History</h2>
+        <div id="chat-container"></div>
+        <button id="logout-button">Logout</button>
+    </div>
+
     <script>
-        const form = document.getElementById('note-form');
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const content = document.getElementById('note-content').value;
-            const response = await fetch('/notes/', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ content }),
+        let accessToken = null;
+        let userId = null;
+
+        async function fetchNotes() {
+            const response = await fetch('/notes/get_notes/', {
+                headers: { 'user_id': userId }
             });
-            const newNote = await response.json();
-            const notesList = document.getElementById('notes-list');
-            const listItem = document.createElement('li');
-            listItem.innerHTML = `${newNote.content} <button onclick="deleteNote(${newNote.id})">Delete</button>`;
-            notesList.appendChild(listItem);
-            document.getElementById('note-content').value = '';
+            const notes = await response.json();
+            const notesContainer = document.getElementById('notes-container');
+            notesContainer.innerHTML = '';
+            notes.forEach(note => {
+                const noteElement = document.createElement('div');
+                noteElement.innerHTML = `<h3>${note.title}</h3><p>${note.content}</p><button onclick="deleteNote('${note.id}')">Delete</button>`;
+                notesContainer.appendChild(noteElement);
+            });
+        }
+
+        async function deleteNote(noteId) {
+            await fetch(`/notes/delete_note/${noteId}`, {
+                method: 'DELETE',
+                headers: { 'user_id': userId }
+            });
+            fetchNotes();
+        }
+
+        document.getElementById('create-note-form').addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const formData = new FormData(event.target);
+            await fetch('/notes/create_note/', {
+                method: 'POST',
+                body: formData,
+                headers: { 'user_id': userId }
+            });
+            event.target.reset();
+            fetchNotes();
         });
 
-        async function deleteNote(id) {
-            await fetch(`/notes/${id}`, { method: 'DELETE' });
-            location.reload();
+        async function chatWithGPT(event) {
+            event.preventDefault();
+            const prompt = document.getElementById('prompt').value;
+            const response = await fetch('/gpt/chat/', {
+                method: 'POST',
+                body: new URLSearchParams({ prompt }),
+                headers: { 'user_id': userId }
+            });
+            const data = await response.json();
+            addChatEntry(prompt, data.response);
+            document.getElementById('prompt').value = '';
         }
 
-        async function loadNotes() {
-            const response = await fetch('/notes/');
-            const notes = await response.json();
-            const notesList = document.getElementById('notes-list');
-            notesList.innerHTML = '';
-            notes.forEach(note => {
-                const listItem = document.createElement('li');
-                listItem.innerHTML = `${note.content} <button onclick="deleteNote(${note.id})">Delete</button>`;
-                notesList.appendChild(listItem);
+        document.getElementById('chat-form').addEventListener('submit', chatWithGPT);
+
+        async function fetchChatHistory() {
+            const response = await fetch('/gpt/chat_history/', {
+                headers: { 'user_id': userId }
+            });
+            const history = await response.json();
+            const chatContainer = document.getElementById('chat-container');
+            chatContainer.innerHTML = '';
+            history.forEach(entry => {
+                const entryElement = document.createElement('div');
+                entryElement.innerHTML = `<strong>You:</strong> ${entry.prompt}<br><strong>GPT:</strong> ${entry.response}<br><br>`;
+                chatContainer.appendChild(entryElement);
             });
         }
 
-        window.onload = loadNotes;
+        document.getElementById('login-form').addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const response = await fetch('/check', {
+                method: 'GET',
+                headers: {
+                    'id': document.getElementById('username').value,
+                    'passwd': document.getElementById('password').value
+                }
+            });
+            const data = await response.json();
+            if (data.status === 200) {
+                userId = data.id;  // 사용자 ID 저장
+                document.getElementById('auth-container').style.display = 'none';
+                document.getElementById('note-container').style.display = 'block';
+                fetchNotes();
+                fetchChatHistory();
+            }
+        });
+
+        document.getElementById('register-form').addEventListener('submit', async (event) => {
+            event.preventDefault();
+            await fetch('/signup', {
+                method: 'POST',
+                headers: {
+                    'id': document.getElementById('reg-username').value,
+                    'passwd': document.getElementById('reg-password').value
+                }
+            });
+            alert('User registered successfully!');
+        });
+
+        document.getElementById('logout-button').addEventListener('click', () => {
+            userId = null;
+            document.getElementById('note-container').style.display = 'none';
+            document.getElementById('auth-container').style.display = 'block';
+        });
     </script>
 </body>
 </html>
